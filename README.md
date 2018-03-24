@@ -28,8 +28,9 @@ This project based on android tensorflow , retrain model to recognize NTD 1,5,10
 
 # Demo
 
-    https://youtu.be/6DA-Q6sNV9s
+https://youtu.be/6DA-Q6sNV9s
 
 # Reference from the tutorial
+
 https://codelabs.developers.google.com/codelabs/tensorflow-for-poets/#3
 https://codelabs.developers.google.com/codelabs/tensorflow-for-poets-2/#2
