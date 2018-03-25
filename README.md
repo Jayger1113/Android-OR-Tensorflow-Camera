@@ -5,11 +5,11 @@ This project based on android tensorflow , retrain model to recognize NTD 1,5,10
 
   https://github.com/tensorflow/tensorflow
 
-# To install tensorflow on your pc
+# Install tensorflow on your pc
 
   $pip3 install tensorflow 
 
-# retrain the model to learn from our images
+# retrain our model to learn from images
 
   1. gather lots of image (better larger than 20 images of each categories)
 
@@ -27,10 +27,9 @@ This project based on android tensorflow , retrain model to recognize NTD 1,5,10
 
 
 # Demo
+https://youtu.be/i1bBcNKei8c
 
-https://youtu.be/6DA-Q6sNV9s
 
-# Reference from the tutorial
-
+# Reference
 https://codelabs.developers.google.com/codelabs/tensorflow-for-poets/#3
 https://codelabs.developers.google.com/codelabs/tensorflow-for-poets-2/#2
