@@ -16,6 +16,6 @@
 -->
 
 <resources>
-    <string name="app_name">TensorFlow Demo</string>
-    <string name="activity_name_classification">TF Classify</string>
+    <string name="app_name">MyTensorFlow</string>
+    <string name="activity_name_classification">TF Classify Coin</string>
 </resources>
