@@ -28,5 +28,9 @@ android {
 }
 
 dependencies {
+    //tensorflow
     compile 'org.tensorflow:tensorflow-android:+'
+    //google drive
+    compile 'com.google.android.gms:play-services-auth:11.6.0'
+    compile 'com.google.android.gms:play-services-drive:11.6.0'
 }

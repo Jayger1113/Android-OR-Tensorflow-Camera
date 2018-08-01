@@ -23,10 +23,27 @@ import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.media.ImageReader.OnImageAvailableListener;
+import android.os.Bundle;
 import android.os.SystemClock;
 import android.util.Size;
 import android.util.TypedValue;
 import android.view.Display;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.view.View;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
+import android.widget.Spinner;
+import android.widget.Toast;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
 import java.util.Vector;
 import org.tensorflow.demo.OverlayView.DrawCallback;
@@ -74,6 +91,63 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
 
   private BorderedText borderedText;
 
+  @Override
+  protected void onCreate(final Bundle savedInstanceState) {
+    super.onCreate(savedInstanceState);
+    final Spinner spinner = (Spinner) findViewById(R.id.spinner1);
+    ArrayAdapter<String> adapter=new ArrayAdapter<String>(this,android.R.layout.simple_spinner_item, getLabelArray());
+    adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+    spinner.setAdapter(adapter);
+    spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+      @Override
+      public void onItemSelected(AdapterView<?> parent, View view, int pos,final long id) {
+        LOGGER.d("onItemSelected pos = "+pos+",selected item ="+spinner.getSelectedItem());
+        runInBackground(new Runnable() {
+          @Override
+          public void run() {
+            if(croppedBitmap != null) {
+              DateFormat dateFormat = new SimpleDateFormat("yyyy_MM_dd_HH:mm:ss.SSS");
+              String fileName = dateFormat.format(new Date())+"_"+ spinner.getSelectedItem()+".png";
+              ImageUtils.saveBitmap(croppedBitmap,fileName);
+            }
+          }
+        });
+      }
+      @Override
+      public void onNothingSelected(AdapterView<?> parent) {
+
+      }
+    });
+  }
+
+  private String[] getLabelArray(){
+    LOGGER.d("getLabelArray");
+    BufferedReader reader = null;
+    List<String> result = new ArrayList<String>();
+    try {
+      reader = new BufferedReader(
+              new InputStreamReader(getAssets().open("retrained_labels.txt"), "UTF-8"));
+
+      // do reading, usually loop until end of file reading
+      String mLine;
+      while ((mLine = reader.readLine()) != null) {
+        //process line
+        LOGGER.d("label = "+ mLine);
+        result.add(mLine);
+      }
+    } catch (IOException e) {
+      e.printStackTrace();
+    } finally {
+      if (reader != null) {
+        try {
+          reader.close();
+        } catch (IOException e) {
+          e.printStackTrace();
+        }
+      }
+    }
+    return result.toArray(new String[result.size()]);
+  }
 
   @Override
   protected int getLayoutId() {
