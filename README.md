@@ -35,3 +35,16 @@ https://youtu.be/i1bBcNKei8c
 
 # Reference
 https://codelabs.developers.google.com/codelabs/tensorflow-for-poets/#0
+
+
+# 2018/08/01 new feature release(upload image to google drive)
+
+# prerequire: 
+1. google account login
+2. go to google API console
+3. follow the tutorial (https://support.google.com/googleapi/answer/6158849?hl=zh-Hant#installedapplications&android)
+4. google api offial website (https://developers.google.com/drive/api/v3/about-sdk)
+
+
+
+
