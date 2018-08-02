@@ -16,8 +16,10 @@
 
 package org.tensorflow.demo;
 
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Bitmap.Config;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Matrix;
 import android.graphics.Paint;
@@ -25,6 +27,8 @@ import android.graphics.Typeface;
 import android.media.ImageReader.OnImageAvailableListener;
 import android.os.Bundle;
 import android.os.SystemClock;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.util.Size;
 import android.util.TypedValue;
 import android.view.Display;
@@ -36,244 +40,323 @@ import android.widget.ArrayAdapter;
 import android.widget.Spinner;
 import android.widget.Toast;
 
+import com.gary.practice.tf.coin.R;
+import com.google.android.gms.auth.api.signin.GoogleSignIn;
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
+import com.google.android.gms.auth.api.signin.GoogleSignInClient;
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.Scope;
+import com.google.android.gms.drive.Drive;
+import com.google.android.gms.drive.DriveClient;
+import com.google.android.gms.drive.DriveContents;
+import com.google.android.gms.drive.DriveFolder;
+import com.google.android.gms.drive.DriveId;
+import com.google.android.gms.drive.DriveResourceClient;
+import com.google.android.gms.drive.MetadataChangeSet;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.tasks.Task;
+import com.google.android.gms.tasks.TaskCompletionSource;
+import com.google.android.gms.tasks.Tasks;
+
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Vector;
+
 import org.tensorflow.demo.OverlayView.DrawCallback;
 import org.tensorflow.demo.env.BorderedText;
 import org.tensorflow.demo.env.ImageUtils;
 import org.tensorflow.demo.env.Logger;
-import org.tensorflow.demo.R; // Explicit import needed for internal Google builds.
 
-public class ClassifierActivity extends CameraActivity implements OnImageAvailableListener {
-  private static final Logger LOGGER = new Logger();
+import my.google.drive.DriveService;
 
-  protected static final boolean SAVE_PREVIEW_BITMAP = false;
+public class ClassifierActivity extends CameraActivity implements OnImageAvailableListener{
+    private static final Logger LOGGER = new Logger();
 
-  private ResultsView resultsView;
+    protected static final boolean SAVE_PREVIEW_BITMAP = false;
 
-  private Bitmap rgbFrameBitmap = null;
-  private Bitmap croppedBitmap = null;
-  private Bitmap cropCopyBitmap = null;
+    private ResultsView resultsView;
 
-  private long lastProcessingTimeMs;
+    private Bitmap rgbFrameBitmap = null;
+    private Bitmap croppedBitmap = null;
+    private Bitmap cropCopyBitmap = null;
 
-
-  private static final int INPUT_SIZE = 299;
-  private static final int IMAGE_MEAN = 128;
-  private static final float IMAGE_STD = 128f;
-  private static final String INPUT_NAME = "Mul";
-  private static final String OUTPUT_NAME = "final_result";
+    private long lastProcessingTimeMs;
 
 
-  private static final String MODEL_FILE = "file:///android_asset/optimized_graph.pb";
-  private static final String LABEL_FILE =
-      "file:///android_asset/retrained_labels.txt";
+    private static final int INPUT_SIZE = 299;
+    private static final int IMAGE_MEAN = 128;
+    private static final float IMAGE_STD = 128f;
+    private static final String INPUT_NAME = "Mul";
+    private static final String OUTPUT_NAME = "final_result";
 
 
-  private static final boolean MAINTAIN_ASPECT = true;
+    private static final String MODEL_FILE = "file:///android_asset/optimized_graph.pb";
+    private static final String LABEL_FILE =
+            "file:///android_asset/retrained_labels.txt";
+    private static final boolean MAINTAIN_ASPECT = true;
 
-  private static final Size DESIRED_PREVIEW_SIZE = new Size(640, 480);
+    private static final Size DESIRED_PREVIEW_SIZE = new Size(640, 480);
+
+    private Integer sensorOrientation;
+    private Classifier classifier;
+    private Matrix frameToCropTransform;
+    private Matrix cropToFrameTransform;
 
 
-  private Integer sensorOrientation;
-  private Classifier classifier;
-  private Matrix frameToCropTransform;
-  private Matrix cropToFrameTransform;
+    private BorderedText borderedText;
 
+    /**
+     * Request code for Google Sign-in
+     */
+    public static final int REQUEST_CODE_SIGN_IN = 0;
 
-  private BorderedText borderedText;
+    @Override
+    public void onStart() {
+        super.onStart();
+        DriveService.getInstance(this).signIn();
+    }
 
-  @Override
-  protected void onCreate(final Bundle savedInstanceState) {
-    super.onCreate(savedInstanceState);
-    final Spinner spinner = (Spinner) findViewById(R.id.spinner1);
-    ArrayAdapter<String> adapter=new ArrayAdapter<String>(this,android.R.layout.simple_spinner_item, getLabelArray());
-    adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-    spinner.setAdapter(adapter);
-    spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-      @Override
-      public void onItemSelected(AdapterView<?> parent, View view, int pos,final long id) {
-        LOGGER.d("onItemSelected pos = "+pos+",selected item ="+spinner.getSelectedItem());
-        runInBackground(new Runnable() {
-          @Override
-          public void run() {
-            if(croppedBitmap != null) {
-              DateFormat dateFormat = new SimpleDateFormat("yyyy_MM_dd_HH:mm:ss.SSS");
-              String fileName = dateFormat.format(new Date())+"_"+ spinner.getSelectedItem()+".png";
-              ImageUtils.saveBitmap(croppedBitmap,fileName);
+    /**
+     * Handles resolution callbacks.
+     */
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        switch (requestCode) {
+            case REQUEST_CODE_SIGN_IN:
+                if (resultCode != RESULT_OK) {
+                    // Sign-in may fail or be cancelled by the user. For this sample, sign-in is
+                    // required and is fatal. For apps where sign-in is optional, handle
+                    // appropriately
+                    Logger.e("Sign-in failed.");
+                    Toast.makeText(this,"sign in google drive failed",Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                Task<GoogleSignInAccount> getAccountTask =
+                        GoogleSignIn.getSignedInAccountFromIntent(data);
+                if (getAccountTask.isSuccessful()) {
+                    DriveService.getInstance(this).initializeDriveClient(getAccountTask.getResult());
+                } else {
+                    Logger.e("Sign-in failed.");
+                    Toast.makeText(this,"sign in google drive failed",Toast.LENGTH_SHORT).show();
+                }
+                break;
+        }
+        super.onActivityResult(requestCode, resultCode, data);
+    }
+
+    @Override
+    protected void onCreate(final Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        final Spinner spinner = (Spinner) findViewById(R.id.spinner1);
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, getLabelArray());
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinner.setAdapter(adapter);
+        spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int pos, final long id) {
+                LOGGER.d("onItemSelected pos = " + pos + ",selected item =" + spinner.getSelectedItem());
+                runInBackground(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (croppedBitmap != null) {
+                            DateFormat dateFormat = new SimpleDateFormat("yyyy_MM_dd_HH:mm:ss.SSS");
+                            String fileName = dateFormat.format(new Date()) + "_" + spinner.getSelectedItem() + ".png";
+                            ImageUtils.saveBitmap(croppedBitmap, fileName);
+                            DriveService.getInstance(ClassifierActivity.this).uploadFile(fileName);
+                        }
+                    }
+                });
             }
-          }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {}
         });
-      }
-      @Override
-      public void onNothingSelected(AdapterView<?> parent) {
+    }
 
-      }
-    });
-  }
+    @Override
+    public void onResume() {
+        super.onResume();
+    }
 
-  private String[] getLabelArray(){
-    LOGGER.d("getLabelArray");
-    BufferedReader reader = null;
-    List<String> result = new ArrayList<String>();
-    try {
-      reader = new BufferedReader(
-              new InputStreamReader(getAssets().open("retrained_labels.txt"), "UTF-8"));
+    @Override
+    public void onPause() {
+        super.onPause();
+    }
 
-      // do reading, usually loop until end of file reading
-      String mLine;
-      while ((mLine = reader.readLine()) != null) {
-        //process line
-        LOGGER.d("label = "+ mLine);
-        result.add(mLine);
-      }
-    } catch (IOException e) {
-      e.printStackTrace();
-    } finally {
-      if (reader != null) {
+    private String[] getLabelArray() {
+        LOGGER.d("getLabelArray");
+        BufferedReader reader = null;
+        List<String> result = new ArrayList<String>();
         try {
-          reader.close();
-        } catch (IOException e) {
-          e.printStackTrace();
-        }
-      }
-    }
-    return result.toArray(new String[result.size()]);
-  }
+            reader = new BufferedReader(
+                    new InputStreamReader(getAssets().open("retrained_labels.txt"), "UTF-8"));
 
-  @Override
-  protected int getLayoutId() {
-    return R.layout.camera_connection_fragment;
-  }
-
-  @Override
-  protected Size getDesiredPreviewFrameSize() {
-    return DESIRED_PREVIEW_SIZE;
-  }
-
-  private static final float TEXT_SIZE_DIP = 10;
-
-  @Override
-  public void onPreviewSizeChosen(final Size size, final int rotation) {
-    final float textSizePx = TypedValue.applyDimension(
-        TypedValue.COMPLEX_UNIT_DIP, TEXT_SIZE_DIP, getResources().getDisplayMetrics());
-    borderedText = new BorderedText(textSizePx);
-    borderedText.setTypeface(Typeface.MONOSPACE);
-
-    classifier =
-        TensorFlowImageClassifier.create(
-            getAssets(),
-            MODEL_FILE,
-            LABEL_FILE,
-            INPUT_SIZE,
-            IMAGE_MEAN,
-            IMAGE_STD,
-            INPUT_NAME,
-            OUTPUT_NAME);
-
-    previewWidth = size.getWidth();
-    previewHeight = size.getHeight();
-
-    final Display display = getWindowManager().getDefaultDisplay();
-    final int screenOrientation = display.getRotation();
-
-    LOGGER.i("Sensor orientation: %d, Screen orientation: %d", rotation, screenOrientation);
-
-    sensorOrientation = rotation + screenOrientation;
-
-    LOGGER.i("Initializing at size %dx%d", previewWidth, previewHeight);
-    rgbFrameBitmap = Bitmap.createBitmap(previewWidth, previewHeight, Config.ARGB_8888);
-    croppedBitmap = Bitmap.createBitmap(INPUT_SIZE, INPUT_SIZE, Config.ARGB_8888);
-
-    frameToCropTransform = ImageUtils.getTransformationMatrix(
-        previewWidth, previewHeight,
-        INPUT_SIZE, INPUT_SIZE,
-        sensorOrientation, MAINTAIN_ASPECT);
-
-    cropToFrameTransform = new Matrix();
-    frameToCropTransform.invert(cropToFrameTransform);
-
-    addCallback(
-        new DrawCallback() {
-          @Override
-          public void drawCallback(final Canvas canvas) {
-            renderDebug(canvas);
-          }
-        });
-  }
-
-  @Override
-  protected void processImage() {
-    rgbFrameBitmap.setPixels(getRgbBytes(), 0, previewWidth, 0, 0, previewWidth, previewHeight);
-    final Canvas canvas = new Canvas(croppedBitmap);
-    canvas.drawBitmap(rgbFrameBitmap, frameToCropTransform, null);
-
-    // For examining the actual TF input.
-    if (SAVE_PREVIEW_BITMAP) {
-      ImageUtils.saveBitmap(croppedBitmap);
-    }
-    runInBackground(
-        new Runnable() {
-          @Override
-          public void run() {
-            final long startTime = SystemClock.uptimeMillis();
-            final List<Classifier.Recognition> results = classifier.recognizeImage(croppedBitmap);
-            lastProcessingTimeMs = SystemClock.uptimeMillis() - startTime;
-            LOGGER.i("Detect: %s", results);
-            cropCopyBitmap = Bitmap.createBitmap(croppedBitmap);
-            if (resultsView == null) {
-              resultsView = (ResultsView) findViewById(R.id.results);
+            // do reading, usually loop until end of file reading
+            String mLine;
+            while ((mLine = reader.readLine()) != null) {
+                //process line
+                LOGGER.d("label = " + mLine);
+                result.add(mLine);
             }
-            resultsView.setResults(results);
-            requestRender();
-            readyForNextImage();
-          }
-        });
-  }
-
-  @Override
-  public void onSetDebug(boolean debug) {
-    classifier.enableStatLogging(debug);
-  }
-
-  private void renderDebug(final Canvas canvas) {
-    if (!isDebug()) {
-      return;
-    }
-    final Bitmap copy = cropCopyBitmap;
-    if (copy != null) {
-      final Matrix matrix = new Matrix();
-      final float scaleFactor = 2;
-      matrix.postScale(scaleFactor, scaleFactor);
-      matrix.postTranslate(
-          canvas.getWidth() - copy.getWidth() * scaleFactor,
-          canvas.getHeight() - copy.getHeight() * scaleFactor);
-      canvas.drawBitmap(copy, matrix, new Paint());
-
-      final Vector<String> lines = new Vector<String>();
-      if (classifier != null) {
-        String statString = classifier.getStatString();
-        String[] statLines = statString.split("\n");
-        for (String line : statLines) {
-          lines.add(line);
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            if (reader != null) {
+                try {
+                    reader.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
         }
-      }
-
-      lines.add("Frame: " + previewWidth + "x" + previewHeight);
-      lines.add("Crop: " + copy.getWidth() + "x" + copy.getHeight());
-      lines.add("View: " + canvas.getWidth() + "x" + canvas.getHeight());
-      lines.add("Rotation: " + sensorOrientation);
-      lines.add("Inference time: " + lastProcessingTimeMs + "ms");
-
-      borderedText.drawLines(canvas, 10, canvas.getHeight() - 10, lines);
+        return result.toArray(new String[result.size()]);
     }
-  }
+
+    @Override
+    protected int getLayoutId() {
+        return R.layout.camera_connection_fragment;
+    }
+
+    @Override
+    protected Size getDesiredPreviewFrameSize() {
+        return DESIRED_PREVIEW_SIZE;
+    }
+
+    private static final float TEXT_SIZE_DIP = 10;
+
+
+    @Override
+    public void onPreviewSizeChosen(final Size size, final int rotation) {
+        final float textSizePx = TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP, TEXT_SIZE_DIP, getResources().getDisplayMetrics());
+        borderedText = new BorderedText(textSizePx);
+        borderedText.setTypeface(Typeface.MONOSPACE);
+
+        classifier =
+                TensorFlowImageClassifier.create(
+                        getAssets(),
+                        MODEL_FILE,
+                        LABEL_FILE,
+                        INPUT_SIZE,
+                        IMAGE_MEAN,
+                        IMAGE_STD,
+                        INPUT_NAME,
+                        OUTPUT_NAME);
+
+        previewWidth = size.getWidth();
+        previewHeight = size.getHeight();
+
+        final Display display = getWindowManager().getDefaultDisplay();
+        final int screenOrientation = display.getRotation();
+
+        LOGGER.i("Sensor orientation: %d, Screen orientation: %d", rotation, screenOrientation);
+
+        sensorOrientation = rotation + screenOrientation;
+
+        LOGGER.i("Initializing at size %dx%d", previewWidth, previewHeight);
+        rgbFrameBitmap = Bitmap.createBitmap(previewWidth, previewHeight, Config.ARGB_8888);
+        croppedBitmap = Bitmap.createBitmap(INPUT_SIZE, INPUT_SIZE, Config.ARGB_8888);
+
+        frameToCropTransform = ImageUtils.getTransformationMatrix(
+                previewWidth, previewHeight,
+                INPUT_SIZE, INPUT_SIZE,
+                sensorOrientation, MAINTAIN_ASPECT);
+
+        cropToFrameTransform = new Matrix();
+        frameToCropTransform.invert(cropToFrameTransform);
+
+        addCallback(
+                new DrawCallback() {
+                    @Override
+                    public void drawCallback(final Canvas canvas) {
+                        renderDebug(canvas);
+                    }
+                });
+    }
+
+    @Override
+    protected void processImage() {
+        rgbFrameBitmap.setPixels(getRgbBytes(), 0, previewWidth, 0, 0, previewWidth, previewHeight);
+        final Canvas canvas = new Canvas(croppedBitmap);
+        canvas.drawBitmap(rgbFrameBitmap, frameToCropTransform, null);
+
+        // For examining the actual TF input.
+        if (SAVE_PREVIEW_BITMAP) {
+            ImageUtils.saveBitmap(croppedBitmap);
+        }
+        runInBackground(
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        final long startTime = SystemClock.uptimeMillis();
+                        final List<Classifier.Recognition> results = classifier.recognizeImage(croppedBitmap);
+                        lastProcessingTimeMs = SystemClock.uptimeMillis() - startTime;
+                        LOGGER.i("Detect: %s", results);
+                        cropCopyBitmap = Bitmap.createBitmap(croppedBitmap);
+                        if (resultsView == null) {
+                            resultsView = (ResultsView) findViewById(R.id.results);
+                        }
+                        resultsView.setResults(results);
+                        requestRender();
+                        readyForNextImage();
+                    }
+                });
+    }
+
+    @Override
+    public void onSetDebug(boolean debug) {
+        classifier.enableStatLogging(debug);
+    }
+
+    private void renderDebug(final Canvas canvas) {
+        if (!isDebug()) {
+            return;
+        }
+        final Bitmap copy = cropCopyBitmap;
+        if (copy != null) {
+            final Matrix matrix = new Matrix();
+            final float scaleFactor = 2;
+            matrix.postScale(scaleFactor, scaleFactor);
+            matrix.postTranslate(
+                    canvas.getWidth() - copy.getWidth() * scaleFactor,
+                    canvas.getHeight() - copy.getHeight() * scaleFactor);
+            canvas.drawBitmap(copy, matrix, new Paint());
+
+            final Vector<String> lines = new Vector<String>();
+            if (classifier != null) {
+                String statString = classifier.getStatString();
+                String[] statLines = statString.split("\n");
+                for (String line : statLines) {
+                    lines.add(line);
+                }
+            }
+
+            lines.add("Frame: " + previewWidth + "x" + previewHeight);
+            lines.add("Crop: " + copy.getWidth() + "x" + copy.getHeight());
+            lines.add("View: " + canvas.getWidth() + "x" + canvas.getHeight());
+            lines.add("Rotation: " + sensorOrientation);
+            lines.add("Inference time: " + lastProcessingTimeMs + "ms");
+
+            borderedText.drawLines(canvas, 10, canvas.getHeight() - 10, lines);
+        }
+    }
+
 }

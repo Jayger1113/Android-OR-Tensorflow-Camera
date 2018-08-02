@@ -37,9 +37,9 @@ public final class Logger {
     IGNORED_CLASS_NAMES.add(Logger.class.getCanonicalName());
   }
 
-  private final String tag;
-  private final String messagePrefix;
-  private int minLogLevel = DEFAULT_MIN_LOG_LEVEL;
+  private static String tag ="tensorflow";
+  private static String messagePrefix = "";
+  private static int minLogLevel = DEFAULT_MIN_LOG_LEVEL;
 
   /**
    * Creates a Logger using the class name as the message prefix.
@@ -92,7 +92,7 @@ public final class Logger {
     this.minLogLevel = minLogLevel;
   }
 
-  public boolean isLoggable(final int logLevel) {
+  public static boolean isLoggable(final int logLevel) {
     return logLevel >= minLogLevel || Log.isLoggable(tag, logLevel);
   }
 
@@ -125,67 +125,47 @@ public final class Logger {
     return Logger.class.getSimpleName();
   }
 
-  private String toMessage(final String format, final Object... args) {
+  private static String toMessage(final String format, final Object... args) {
     return messagePrefix + (args.length > 0 ? String.format(format, args) : format);
   }
 
-  public void v(final String format, final Object... args) {
-    if (isLoggable(Log.VERBOSE)) {
+  public static void v(final String format, final Object... args) {
       Log.v(tag, toMessage(format, args));
-    }
   }
 
-  public void v(final Throwable t, final String format, final Object... args) {
-    if (isLoggable(Log.VERBOSE)) {
+  public static void v(final Throwable t, final String format, final Object... args) {
       Log.v(tag, toMessage(format, args), t);
-    }
   }
 
-  public void d(final String format, final Object... args) {
-    if (isLoggable(Log.DEBUG)) {
+  public static void d(final String format, final Object... args) {
       Log.d(tag, toMessage(format, args));
-    }
   }
 
-  public void d(final Throwable t, final String format, final Object... args) {
-    if (isLoggable(Log.DEBUG)) {
+  public static void d(final Throwable t, final String format, final Object... args) {
       Log.d(tag, toMessage(format, args), t);
-    }
   }
 
-  public void i(final String format, final Object... args) {
-    if (isLoggable(Log.INFO)) {
+  public static void i(final String format, final Object... args) {
       Log.i(tag, toMessage(format, args));
-    }
   }
 
-  public void i(final Throwable t, final String format, final Object... args) {
-    if (isLoggable(Log.INFO)) {
+  public static void i(final Throwable t, final String format, final Object... args) {
       Log.i(tag, toMessage(format, args), t);
-    }
   }
 
-  public void w(final String format, final Object... args) {
-    if (isLoggable(Log.WARN)) {
+  public static void w(final String format, final Object... args) {
       Log.w(tag, toMessage(format, args));
-    }
   }
 
-  public void w(final Throwable t, final String format, final Object... args) {
-    if (isLoggable(Log.WARN)) {
+  public static void w(final Throwable t, final String format, final Object... args) {
       Log.w(tag, toMessage(format, args), t);
-    }
   }
 
-  public void e(final String format, final Object... args) {
-    if (isLoggable(Log.ERROR)) {
+  public static void e(final String format, final Object... args) {
       Log.e(tag, toMessage(format, args));
-    }
   }
 
-  public void e(final Throwable t, final String format, final Object... args) {
-    if (isLoggable(Log.ERROR)) {
+  public static void e(final Throwable t, final String format, final Object... args) {
       Log.e(tag, toMessage(format, args), t);
-    }
   }
 }
