@@ -12,7 +12,7 @@ This project based on android tensorflow , retrain model to recognize NTD 1,5,10
 4. $git checkout r1.5
 
 
-# retrain our model to learn from images
+# retrain our model learn from images
 
   1. gather lots of image (better larger than 20 images of each categories, or it might cause issue)
 
